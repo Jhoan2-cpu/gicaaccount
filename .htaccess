@@ -1,0 +1,18 @@
+# Allow public access to mobile API endpoint
+<Files "mobile-api-public.php">
+    Satisfy Any
+    Allow from all
+    Require all granted
+    # Disable HTTP authentication for this file
+    AuthType None
+    Require all granted
+</Files>
+
+# Allow public access to debug endpoints for mobile testing
+<FilesMatch "^(debug-fcm-public|test-device-registration|test-endpoint-direct|fcm-register)\.php$">
+    Satisfy Any
+    Allow from all  
+    Require all granted
+    AuthType None
+    Require all granted
+</FilesMatch>

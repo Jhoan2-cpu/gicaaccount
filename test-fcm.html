@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test FCM - GICA Account</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: 0 auto; }
+        .test-section { margin: 20px 0; padding: 20px; border: 2px solid #ddd; border-radius: 8px; }
+        .success { border-color: #4CAF50; background: #f9fff9; }
+        .error { border-color: #f44336; background: #fff9f9; }
+        .warning { border-color: #ff9800; background: #fffbf0; }
+        .btn { padding: 10px 20px; margin: 5px; border: none; border-radius: 4px; cursor: pointer; }
+        .btn-primary { background: #007cba; color: white; }
+        .btn-secondary { background: #666; color: white; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 4px; overflow-x: auto; }
+        .status { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <h1>🧪 Test FCM Integration - GICA Account</h1>
+    
+    <div class="test-section">
+        <h2>🔧 Configuration Check</h2>
+        <div id="config-status">Checking configuration...</div>
+        <pre id="config-details"></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>🌐 Browser Support</h2>
+        <div id="browser-status">Checking browser support...</div>
+        <ul id="browser-details"></ul>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔔 Notification Permission</h2>
+        <div id="permission-status">Checking permission...</div>
+        <button id="request-permission" class="btn btn-primary">Request Permission</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>🔑 FCM Token</h2>
+        <div id="token-status">No token yet</div>
+        <button id="get-token" class="btn btn-primary">Get Token</button>
+        <pre id="token-display" class="hidden"></pre>
+    </div>
+    
+    <div class="test-section">
+        <h2>📨 Test Notification</h2>
+        <div id="test-status">Ready to test</div>
+        <button id="send-test" class="btn btn-primary">Send Test Notification</button>
+    </div>
+    
+    <div class="test-section">
+        <h2>📋 Debug Log</h2>
+        <button id="clear-log" class="btn btn-secondary">Clear Log</button>
+        <pre id="debug-log"></pre>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+    
+    <script>
+        // Debug logging
+        const debugLog = document.getElementById('debug-log');
+        function log(message, type = 'info') {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${type.toUpperCase()}: ${message}\n`;
+            debugLog.textContent += logEntry;
+            debugLog.scrollTop = debugLog.scrollHeight;
+            console.log(`[FCM Test] ${message}`);
+        }
+        
+        // Firebase configuration (should match your WordPress settings)
+        const firebaseConfig = {
+            apiKey: "AIzaSyAGududTxCJe5ySMw6lLkpkyE2U09PCOqg",
+            authDomain: "gicaform-notifications.firebaseapp.com",
+            projectId: "gicaform-notifications",
+            storageBucket: "gicaform-notifications.firebasestorage.app",
+            messagingSenderId: "714103885883",
+            appId: "1:714103885883:web:2f6a575a362d1aa7f50c1e"
+        };
+        
+        const vapidKey = "BK3JJGUHfOdfAGxF2xgLJPKCVPJq2ql_FIHjmQWFCNh-l9Uy_b5WDQJ7a56l5rXjH2ZQqOy8e8DJYvK_EeH4zeg";
+        
+        let messaging;
+        let currentToken;
+        
+        // Status elements
+        const configStatus = document.getElementById('config-status');
+        const configDetails = document.getElementById('config-details');
+        const browserStatus = document.getElementById('browser-status');
+        const browserDetails = document.getElementById('browser-details');
+        const permissionStatus = document.getElementById('permission-status');
+        const tokenStatus = document.getElementById('token-status');
+        const tokenDisplay = document.getElementById('token-display');
+        const testStatus = document.getElementById('test-status');
+        
+        // Initialize test
+        async function init() {
+            log('Starting FCM Test');
+            
+            // Check configuration
+            checkConfiguration();
+            
+            // Check browser support
+            checkBrowserSupport();
+            
+            // Check notification permission
+            checkPermission();
+            
+            // Initialize Firebase
+            try {
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                }
+                messaging = firebase.messaging();
+                log('Firebase initialized successfully');
+                
+                // Register service worker
+                await registerServiceWorker();
+                
+            } catch (error) {
+                log(`Firebase initialization error: ${error.message}`, 'error');
+            }
+        }
+        
+        function checkConfiguration() {
+            const config = firebaseConfig;
+            const isValid = config.apiKey && config.projectId && config.messagingSenderId && config.appId;
+            
+            if (isValid) {
+                configStatus.innerHTML = '<div class="status success">✅ Configuration is valid</div>';
+                configDetails.textContent = JSON.stringify(config, null, 2);
+                log('Configuration check: VALID');
+            } else {
+                configStatus.innerHTML = '<div class="status error">❌ Configuration is invalid</div>';
+                log('Configuration check: INVALID', 'error');
+            }
+        }
+        
+        function checkBrowserSupport() {
+            const features = {
+                'Service Workers': 'serviceWorker' in navigator,
+                'Push API': 'PushManager' in window,
+                'Notifications': 'Notification' in window,
+                'HTTPS': location.protocol === 'https:' || location.hostname === 'localhost'
+            };
+            
+            let allSupported = true;
+            browserDetails.innerHTML = '';
+            
+            for (const [feature, supported] of Object.entries(features)) {
+                const li = document.createElement('li');
+                li.innerHTML = supported ? 
+                    `✅ ${feature}: Supported` : 
+                    `❌ ${feature}: Not supported`;
+                browserDetails.appendChild(li);
+                
+                if (!supported) allSupported = false;
+            }
+            
+            if (allSupported) {
+                browserStatus.innerHTML = '<div class="status success">✅ Browser fully supports FCM</div>';
+                log('Browser support: FULL');
+            } else {
+                browserStatus.innerHTML = '<div class="status error">❌ Browser has limited FCM support</div>';
+                log('Browser support: LIMITED', 'warning');
+            }
+        }
+        
+        function checkPermission() {
+            const permission = Notification.permission;
+            
+            switch (permission) {
+                case 'granted':
+                    permissionStatus.innerHTML = '<div class="status success">✅ Notifications are allowed</div>';
+                    log('Notification permission: GRANTED');
+                    break;
+                case 'denied':
+                    permissionStatus.innerHTML = '<div class="status error">❌ Notifications are blocked</div>';
+                    log('Notification permission: DENIED', 'error');
+                    break;
+                default:
+                    permissionStatus.innerHTML = '<div class="status warning">⚠️ Notification permission not requested</div>';
+                    log('Notification permission: DEFAULT');
+            }
+        }
+        
+        async function registerServiceWorker() {
+            try {
+                const swPath = '/wp-content/plugins/GICAACCOUNT/firebase-messaging-sw.js';
+                const registration = await navigator.serviceWorker.register(swPath, {
+                    scope: '/wp-content/plugins/GICAACCOUNT/'
+                });
+                log('Service Worker registered successfully');
+                return registration;
+            } catch (error) {
+                log(`Service Worker registration error: ${error.message}`, 'error');
+                throw error;
+            }
+        }
+        
+        async function requestPermission() {
+            try {
+                const permission = await Notification.requestPermission();
+                checkPermission();
+                log(`Permission requested: ${permission}`);
+                return permission;
+            } catch (error) {
+                log(`Permission request error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function getToken() {
+            try {
+                if (!messaging) {
+                    throw new Error('Firebase messaging not initialized');
+                }
+                
+                if (Notification.permission !== 'granted') {
+                    throw new Error('Notification permission not granted');
+                }
+                
+                const registration = await navigator.serviceWorker.getRegistration('/wp-content/plugins/GICAACCOUNT/');
+                
+                const token = await messaging.getToken({
+                    vapidKey: vapidKey,
+                    serviceWorkerRegistration: registration
+                });
+                
+                if (token) {
+                    currentToken = token;
+                    tokenStatus.innerHTML = '<div class="status success">✅ Token generated successfully</div>';
+                    tokenDisplay.textContent = token;
+                    tokenDisplay.classList.remove('hidden');
+                    log(`Token generated: ${token.substring(0, 50)}...`);
+                } else {
+                    throw new Error('No registration token available');
+                }
+                
+            } catch (error) {
+                tokenStatus.innerHTML = `<div class="status error">❌ Token generation failed: ${error.message}</div>`;
+                log(`Token generation error: ${error.message}`, 'error');
+            }
+        }
+        
+        async function sendTestNotification() {
+            try {
+                if (!currentToken) {
+                    throw new Error('No FCM token available. Generate a token first.');
+                }
+                
+                // This would normally call your WordPress AJAX endpoint
+                // For now, we'll just show a local notification
+                const notification = new Notification('🧪 Test Notification', {
+                    body: 'FCM integration test successful!',
+                    icon: '/wp-content/plugins/GICAACCOUNT/assets/images/icon.png',
+                    tag: 'fcm-test'
+                });
+                
+                testStatus.innerHTML = '<div class="status success">✅ Test notification sent (local)</div>';
+                log('Test notification sent (local)');
+                
+                notification.onclick = () => {
+                    log('Test notification clicked');
+                    notification.close();
+                };
+                
+            } catch (error) {
+                testStatus.innerHTML = `<div class="status error">❌ Test failed: ${error.message}</div>`;
+                log(`Test notification error: ${error.message}`, 'error');
+            }
+        }
+        
+        // Event listeners
+        document.getElementById('request-permission').addEventListener('click', requestPermission);
+        document.getElementById('get-token').addEventListener('click', getToken);
+        document.getElementById('send-test').addEventListener('click', sendTestNotification);
+        document.getElementById('clear-log').addEventListener('click', () => {
+            debugLog.textContent = '';
+            log('Debug log cleared');
+        });
+        
+        // Start the test when page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

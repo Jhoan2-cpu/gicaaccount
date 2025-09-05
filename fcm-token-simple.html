@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Obtener Token FCM - Versión Simple</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .step {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 15px 0;
+            border-left: 4px solid #007cba;
+            border-radius: 5px;
+        }
+        button {
+            background: #007cba;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px 5px;
+            width: 100%;
+            max-width: 300px;
+        }
+        button:hover {
+            background: #005a87;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #tokenResult {
+            background: #e7f3ff;
+            border: 1px solid #b3d9ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+            word-break: break-all;
+            display: none;
+        }
+        .success {
+            background: #d4edda;
+            border-color: #c3e6cb;
+            color: #155724;
+        }
+        .error {
+            background: #f8d7da;
+            border-color: #f5c6cb;
+            color: #721c24;
+        }
+        textarea {
+            width: 100%;
+            height: 100px;
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        .token-display {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: monospace;
+            font-size: 12px;
+            line-height: 1.4;
+            max-height: 200px;
+            overflow-y: auto;
+        }
+        .center {
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔔 Generador de Token FCM - Versión Simple</h1>
+        
+        <div class="step">
+            <h3>📱 Tu Configuración Firebase:</h3>
+            <p>Aquí está tu configuración que necesitas usar:</p>
+            <div class="token-display">
+{
+  "apiKey": "AIzaSyAGududTxCJe5ySMw6lLkpkyE2U09PCOqg",
+  "authDomain": "gicaform-notifications.firebaseapp.com",
+  "projectId": "gicaform-notifications",
+  "storageBucket": "gicaform-notifications.firebasestorage.app",
+  "messagingSenderId": "714103885883",
+  "appId": "1:714103885883:web:d423e02a822e5c1df50c1e",
+  "measurementId": "G-GJ1C1ND938"
+}
+            </div>
+        </div>
+
+        <div class="center">
+            <button onclick="initFirebaseAndGetToken()">🚀 Obtener Mi Token FCM</button>
+        </div>
+
+        <div id="tokenResult">
+            <h3>✅ Tu Token FCM:</h3>
+            <div id="tokenValue" class="token-display"></div>
+            <br>
+            <button onclick="copyToken()">📋 Copiar Token</button>
+            <p><small>Copia este token y pégalo en la configuración FCM de WordPress.</small></p>
+        </div>
+
+        <div class="step">
+            <h3>🔧 ¿Cómo usar este token?</h3>
+            <ol>
+                <li>Copia el token que aparecerá arriba</li>
+                <li>Ve a tu WordPress → GICA Account → FCM</li>
+                <li>Pega este token en "Token del Dispositivo"</li>
+                <li>¡Listo para recibir notificaciones!</li>
+            </ol>
+        </div>
+    </div>
+
+    <!-- Firebase SDKs -->
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js"></script>
+
+    <script>
+        // Tu configuración Firebase
+        const firebaseConfig = {
+            apiKey: "AIzaSyAGududTxCJe5ySMw6lLkpkyE2U09PCOqg",
+            authDomain: "gicaform-notifications.firebaseapp.com",
+            projectId: "gicaform-notifications",
+            storageBucket: "gicaform-notifications.firebasestorage.app",
+            messagingSenderId: "714103885883",
+            appId: "1:714103885883:web:d423e02a822e5c1df50c1e",
+            measurementId: "G-GJ1C1ND938"
+        };
+
+        async function initFirebaseAndGetToken() {
+            const button = event.target;
+            const tokenResult = document.getElementById('tokenResult');
+            const tokenValue = document.getElementById('tokenValue');
+            
+            try {
+                button.disabled = true;
+                button.textContent = '⏳ Configurando Firebase...';
+                
+                // Inicializar Firebase si no está ya inicializado
+                if (!firebase.apps.length) {
+                    firebase.initializeApp(firebaseConfig);
+                } else {
+                    console.log('Firebase ya inicializado');
+                }
+                
+                button.textContent = '📝 Registrando Service Worker...';
+                
+                // Crear y registrar service worker
+                await registerServiceWorker();
+                
+                button.textContent = '🔑 Pidiendo permisos...';
+                
+                // Pedir permisos de notificación
+                const permission = await Notification.requestPermission();
+                if (permission !== 'granted') {
+                    throw new Error('❌ Permisos de notificación denegados. Por favor, acepta los permisos para continuar.');
+                }
+                
+                button.textContent = '🎯 Obteniendo token...';
+                
+                // Obtener token FCM
+                const messaging = firebase.messaging();
+                const token = await messaging.getToken({
+                    vapidKey: 'BKCnPd2l6QV-DqHd1Qp_wSV6JmrxFmhjmg4Gt3bm8C4fO7OaROsj1LV_WnbVx9lK0OXhBBr6VSkJc1rPQoalv1w' // VAPID key pública por defecto
+                });
+                
+                if (token) {
+                    tokenValue.textContent = token;
+                    tokenResult.className = 'success';
+                    tokenResult.style.display = 'block';
+                    button.textContent = '✅ ¡Token Obtenido!';
+                    
+                    // Scroll to token
+                    tokenResult.scrollIntoView({ behavior: 'smooth' });
+                } else {
+                    throw new Error('❌ No se pudo obtener el token. Intenta recargar la página y vuelve a intentar.');
+                }
+                
+            } catch (error) {
+                console.error('Error detallado:', error);
+                tokenResult.className = 'error';
+                tokenValue.innerHTML = `<strong>Error:</strong> ${error.message}<br><br><small>Intenta:</small><br>• Recargar la página<br>• Usar Chrome o Firefox<br>• Verificar que las notificaciones estén habilitadas`;
+                tokenResult.style.display = 'block';
+                button.textContent = '🔄 Intentar de nuevo';
+            } finally {
+                button.disabled = false;
+            }
+        }
+
+        async function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                // Crear service worker dinámicamente
+                const swCode = `
+                    // Firebase Messaging Service Worker
+                    importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+                    importScripts('https://www.gstatic.com/firebasejs/9.23.0/firebase-messaging-compat.js');
+                    
+                    const firebaseConfig = {
+                        apiKey: "AIzaSyAGududTxCJe5ySMw6lLkpkyE2U09PCOqg",
+                        authDomain: "gicaform-notifications.firebaseapp.com",
+                        projectId: "gicaform-notifications",
+                        storageBucket: "gicaform-notifications.firebasestorage.app",
+                        messagingSenderId: "714103885883",
+                        appId: "1:714103885883:web:d423e02a822e5c1df50c1e"
+                    };
+                    
+                    firebase.initializeApp(firebaseConfig);
+                    const messaging = firebase.messaging();
+                    
+                    messaging.onBackgroundMessage(function(payload) {
+                        console.log('Mensaje en background:', payload);
+                        const notificationTitle = payload.notification.title || 'Nueva notificación';
+                        const notificationOptions = {
+                            body: payload.notification.body || 'Tienes una nueva notificación',
+                            icon: '/firebase-logo.png'
+                        };
+                        
+                        self.registration.showNotification(notificationTitle, notificationOptions);
+                    });
+                `;
+                
+                const blob = new Blob([swCode], { type: 'application/javascript' });
+                const swUrl = URL.createObjectURL(blob);
+                
+                const registration = await navigator.serviceWorker.register(swUrl);
+                console.log('Service Worker registrado:', registration);
+                
+                // Esperar a que esté activo
+                if (registration.installing) {
+                    await new Promise(resolve => {
+                        registration.installing.addEventListener('statechange', () => {
+                            if (registration.installing.state === 'activated') {
+                                resolve();
+                            }
+                        });
+                    });
+                }
+            } else {
+                throw new Error('Service Workers no soportados en este navegador');
+            }
+        }
+
+        function copyToken() {
+            const tokenValue = document.getElementById('tokenValue').textContent;
+            navigator.clipboard.writeText(tokenValue).then(function() {
+                const button = event.target;
+                const originalText = button.textContent;
+                button.textContent = '✅ ¡Copiado!';
+                button.style.background = '#28a745';
+                setTimeout(() => {
+                    button.textContent = originalText;
+                    button.style.background = '#007cba';
+                }, 2000);
+            }).catch(function() {
+                // Fallback para navegadores sin clipboard API
+                const textArea = document.createElement('textarea');
+                textArea.value = tokenValue;
+                document.body.appendChild(textArea);
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+                
+                const button = event.target;
+                button.textContent = '✅ ¡Copiado!';
+                setTimeout(() => {
+                    button.textContent = '📋 Copiar Token';
+                }, 2000);
+            });
+        }
+    </script>
+</body>
+</html>
